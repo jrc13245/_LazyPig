@@ -75,6 +75,8 @@ local ctrlalttime = 0
 local ctrlshifttime = 0
 local altshifttime = 0
 local greenrolltime = 0
+local shamanTankTree = 2 -- Enhancement
+local shamanTankTalent = 11 -- Spirit Armor
 
 local timer_split = nil
 local player_summon_confirm = nil
@@ -152,7 +154,6 @@ function LazyPig_OnLoad()
 	SLASH_LAZYPIG1 = "/lp";
 	SLASH_LAZYPIG2 = "/lazypig";
 	SlashCmdList["LAZYPIG"] = LazyPig_Command;
-
 	this:RegisterEvent("ADDON_LOADED")
 	this:RegisterEvent("PLAYER_LOGIN")
 	this:RegisterEvent("CHAT_MSG")
@@ -439,7 +440,7 @@ function LazyPig_OnEvent(event)
 		end
 		QuestRecord["index"] = 0
 
-	elseif event == "UNIT_INVENTORY_CHANGED" or event == "PLAYER_AURAS_CHANGED" or (event == "UPDATE_BONUS_ACTIONBAR" and LazyPig_PlayerClass("Druid", "player")) then
+	elseif (event == "UNIT_INVENTORY_CHANGED" and arg1 == "player") or event == "PLAYER_AURAS_CHANGED" or (event == "UPDATE_BONUS_ACTIONBAR" and LazyPig_PlayerClass("Druid")) then
 		LazyPig_CheckSalvation()
 		LazyPig_CheckManaBuffs()
 
@@ -754,25 +755,25 @@ function IsFriend(name)
 			return true
 		end
 	end
-	return nil
+	return false
 end
 
 function IsGuildMate(name)
 	if IsInGuild() then
-		for i=1, GetNumGuildMembers() do
-			if strlower(GetGuildRosterInfo(i)) == strlower(name) then
-			  return true
+		for i = 1, GetNumGuildMembers() do
+			if string.lower(GetGuildRosterInfo(i)) == string.lower(name) then
+				return true
 			end
 		end
 	end
-	return nil
+	return false
 end
 
 function AcceptGroupInvite()
-	AcceptGroup();
-	StaticPopup_Hide("PARTY_INVITE");
-	PlaySoundFile("Sound\\Doodad\\BellTollNightElf.wav");
-	UIErrorsFrame:AddMessage("Group Auto Accept");
+	AcceptGroup()
+	StaticPopup_Hide("PARTY_INVITE")
+	PlaySoundFile("Sound\\Doodad\\BellTollNightElf.wav")
+	UIErrorsFrame:AddMessage("Group Auto Accept")
 end
 
 function LazyPig_AutoSummon()
@@ -1825,12 +1826,10 @@ end
 
 function LazyPig_PlayerClass(class, unit)
 	if class then
-		local unit = unit or "player"
+		unit = unit or "player"
 		local _, c = UnitClass(unit)
 		if c then
-			if string.lower(c) == string.lower(class) then
-				return true
-			end
+			return string.lower(c) == string.lower(class)
 		end
 	end
 	return false
@@ -1838,8 +1837,8 @@ end
 
 function LazyPig_IsBearForm()
 	for i = 1 , GetNumShapeshiftForms() do
-		local _, name, isActive = GetShapeshiftFormInfo(i);
-		if isActive and LazyPig_PlayerClass("Druid", "player") and (name == "Bear Form" or name == "Dire Bear Form") then
+		local _, name, isActive = GetShapeshiftFormInfo(i)
+		if isActive and LazyPig_PlayerClass("Druid") and (name == "Bear Form" or name == "Dire Bear Form") then
 			return true
 		end
 	end
@@ -1852,21 +1851,25 @@ function LazyPig_IsShieldEquipped()
 	id = tonumber(id)
 	if id then
 		local _, _, _, _, _, _, _, invType = GetItemInfo(id)
-		if invType == "INVTYPE_SHIELD" then
-			return true
-		end
+		return invType == "INVTYPE_SHIELD"
 	end
 	return false
 end
 
 function LazyPig_CancelShapeshiftBuff()
 	for i = 1, GetNumShapeshiftForms() do
-		local _, _, isActive = GetShapeshiftFormInfo(i);
-		if isActive and LazyPig_PlayerClass("Druid", "player") then
+		local _, _, isActive = GetShapeshiftFormInfo(i)
+		if isActive and LazyPig_PlayerClass("Druid") then
 			CastShapeshiftForm(i)
 			return
 		end
 	end
+end
+
+function LazyPig_HasTalent(tree, talent, rank)
+	if not rank then rank = 1 end
+	local _, _, _, _, r = GetTalentInfo(tree, talent)
+	return r >= rank
 end
 
 local salvationbuffs = {
@@ -1874,24 +1877,30 @@ local salvationbuffs = {
 	"Spell_Holy_GreaterBlessingofSalvation"
 }
 function LazyPig_CheckSalvation()
-	if not LPCONFIG.SALVA then
+	if LPCONFIG.SALVA ~= 1 and LPCONFIG.SALVA ~= 2 then
 		return
 	end
-	if not (LPCONFIG.SALVA == 1 or (LPCONFIG.SALVA == 2 and (LazyPig_IsShieldEquipped() and LazyPig_PlayerClass("Warrior", "player") or LazyPig_IsBearForm() or LazyPig_HasRighteousFury()))) then
-		return
+	if LPCONFIG.SALVA == 2 then
+		local warriorTank = LazyPig_IsShieldEquipped() and LazyPig_PlayerClass("Warrior")
+		local druidTank = LazyPig_IsBearForm()
+		local paladinTank = LazyPig_HasRighteousFury()
+		local shamanTank = LazyPig_IsShieldEquipped() and LazyPig_PlayerClass("Shaman") and LazyPig_HasTalent(shamanTankTree, shamanTankTalent, 2)
+		if not (warriorTank or druidTank or paladinTank or shamanTank) then
+			return
+		end
 	end
 	local counter = 0
 	while GetPlayerBuff(counter) >= 0 do
 		local index, untilCancelled = GetPlayerBuff(counter)
 		if untilCancelled ~= 1 then
 			local texture = GetPlayerBuffTexture(index)
-			if texture then  -- Check if texture is not nil
+			if texture then
 				local i = 1
-					while salvationbuffs[i] do
-						if string.find(texture, salvationbuffs[i]) then
-						CancelPlayerBuff(index);
-						UIErrorsFrame:Clear();
-						UIErrorsFrame:AddMessage("Salvation Removed");
+				while salvationbuffs[i] do
+					if string.find(texture, salvationbuffs[i]) then
+						CancelPlayerBuff(index)
+						UIErrorsFrame:Clear()
+						UIErrorsFrame:AddMessage("Salvation Removed")
 						return
 					end
 					i = i + 1
@@ -1920,10 +1929,7 @@ local manabuffs = {
 	"Spell_Holy_DivineSpirit"
 }
 function LazyPig_CheckManaBuffs()
-	if not LPCONFIG.REMOVEMANABUFFS then
-		return
-	end
-	if LazyPig_BG() then
+	if not LPCONFIG.REMOVEMANABUFFS or LazyPig_BG() then
 		return
 	end
 	local counter = 0
@@ -1935,9 +1941,9 @@ function LazyPig_CheckManaBuffs()
 				local i = 1
 				while manabuffs[i] do
 					if string.find(texture, manabuffs[i]) then
-						CancelPlayerBuff(index);
-						UIErrorsFrame:Clear();
-						UIErrorsFrame:AddMessage("Intellect or Wisdom or Spirit Removed");
+						CancelPlayerBuff(index)
+						UIErrorsFrame:Clear()
+						UIErrorsFrame:AddMessage("Intellect or Wisdom or Spirit Removed")
 						return
 					end
 					i = i + 1
@@ -2076,7 +2082,7 @@ function LazyPig_Duel_EFC()
 end
 
 function LazyPig_HasRighteousFury()
-	if not LazyPig_PlayerClass("Paladin", "player") then return false end
+	if not LazyPig_PlayerClass("Paladin") then return false end
 	local counter = 0
 	while GetPlayerBuff(counter) >= 0 do
 		local index, untilCancelled = GetPlayerBuff(counter)

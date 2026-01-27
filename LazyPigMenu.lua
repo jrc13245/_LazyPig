@@ -67,13 +67,13 @@ LazyPigOptions = {
 		exclusive = true,
 		checkBoxes = {
 			{ text = ALWAYS, var = "SALVA", value = 1, tooltip = ALWAYS, setFunc = LazyPig_CheckSalvation },
-			{ text = "Smart", var = "SALVA", value = 2, tooltip = "Smart", tooltipSub = "Auto remove if:\nYou are Warrior and have shield equipped,\nYou are Druid in Bear Form,\nYou are Paladin with Righteous Fury.", setFunc = LazyPig_CheckSalvation },
+			{ text = "Smart", var = "SALVA", value = 2, tooltip = "Smart", tooltipSub = "Auto remove if:\nYou are Warrior and have shield equipped,\nYou are Shaman and have shield equipped and have Spirit Armor talent rank 2,\nYou are Druid in Bear Form,\nYou are Paladin with Righteous Fury.", setFunc = LazyPig_CheckSalvation },
 		},
 	},
 	{
 		text = "Mana Buffs Remover",
 		checkBoxes = {
-			{ text = ALWAYS, var = "REMOVEMANABUFFS", tooltip = "Auto remove Blessing of Wisdom / Arcane Intellect / Prayer of Spirit.", setFunc = LazyPig_CheckManaBuffs },
+			{ text = ALWAYS, var = "REMOVEMANABUFFS", tooltip = "Auto remove Blessing of Wisdom / Arcane Intellect / Prayer of Spirit. Disabled in battlegrounds.", setFunc = LazyPig_CheckManaBuffs },
 		},
 	},
 	{
