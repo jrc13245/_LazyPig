@@ -207,6 +207,7 @@ function LazyPig_OnLoad()
 	this:RegisterEvent("BATTLEFIELDS_SHOW")
 	this:RegisterEvent("GOSSIP_SHOW")
 	this:RegisterEvent("QUEST_GREETING")
+	this:RegisterEvent("QUEST_DETAIL")
 	this:RegisterEvent("UI_ERROR_MESSAGE")
 	this:RegisterEvent("QUEST_PROGRESS")
 	this:RegisterEvent("QUEST_COMPLETE")
@@ -254,7 +255,7 @@ function LazyPig_OnUpdate()
 	-- Fast path: when no features need modifier polling, only run timers
 	local needModifiers = LPCONFIG.SPECIALKEY or merchantstatus or timer_split
 		or player_summon_confirm or player_bg_confirm or bgstatus ~= 0
-		or (not QuestHaste and QuestRecord["details"])
+		or (not QuestHaste and (QuestRecord["details"] or QuestFrameDetailPanel:IsVisible()))
 	if not needModifiers and not next(ScheduleButton) and not next(ScheduleFunction) and not ScheduleSplit.active then
 		-- Only guild roster timer
 		if (current_time - roster_task_refresh) > 29 then
@@ -724,13 +725,13 @@ function LazyPig_OnEvent(event)
 			end
 		end
 
-		if not gossipbreak and gossipnr then
+		if not gossipbreak and gossipnr and not (QuestRecord["details"] and IsAltKeyDown() and not QuestHaste) then
 			SelectGossipOption(gossipnr);
 		else
 			LazyPig_ReplyQuest(event);
 		end
 
-	elseif event == "QUEST_PROGRESS" or event == "QUEST_COMPLETE" then
+	elseif event == "QUEST_DETAIL" or event == "QUEST_PROGRESS" or event == "QUEST_COMPLETE" then
 		LazyPig_ReplyQuest(event);
 
 	elseif event == "CHAT_MSG_BG_SYSTEM_ALLIANCE" or event == "CHAT_MSG_BG_SYSTEM_HORDE" then
@@ -1388,6 +1389,8 @@ function LazyPig_ReplyQuest(event)
 			LazyPig_SelectActiveQuest(nr, true)
 		end
 
+	elseif event == "QUEST_DETAIL" then
+		ScheduleFunctionLaunch(AcceptQuest, 0)
 	elseif event == "QUEST_PROGRESS" then
 		CompleteQuest()
 	elseif event == "QUEST_COMPLETE" then
@@ -1987,13 +1990,26 @@ function LazyPig_CheckSalvation()
 		end
 	end
 
-	-- Tier 1: Nampower direct cancel by spell ID (O(1), no iteration)
-	if hasNampower_CancelAura then
-		for spellId in pairs(SPELL_SALVATION) do
-			CancelPlayerAuraSpellId(spellId, 1)
+	-- Tier 1: Nampower cancel by spell ID (verify buff exists before messaging)
+	if hasNampower_CancelAura and hasGetPlayerBuffID then
+		local found = false
+		local counter = 0
+		while GetPlayerBuff(counter) >= 0 do
+			local index, untilCancelled = GetPlayerBuff(counter)
+			if untilCancelled ~= 1 then
+				local bid = GetPlayerBuffID(index)
+				bid = (bid < -1) and (bid + 65536) or bid
+				if SPELL_SALVATION[bid] then
+					CancelPlayerAuraSpellId(bid, 1)
+					found = true
+				end
+			end
+			counter = counter + 1
 		end
-		UIErrorsFrame:Clear()
-		UIErrorsFrame:AddMessage("Salvation Removed")
+		if found then
+			UIErrorsFrame:Clear()
+			UIErrorsFrame:AddMessage("Salvation Removed")
+		end
 		return
 	end
 
@@ -2062,13 +2078,26 @@ function LazyPig_CheckManaBuffs()
 		return
 	end
 
-	-- Tier 1: Nampower direct cancel by spell ID (O(1), no iteration)
-	if hasNampower_CancelAura then
-		for spellId in pairs(SPELL_MANA_BUFFS) do
-			CancelPlayerAuraSpellId(spellId, 1)
+	-- Tier 1: Nampower cancel by spell ID (verify buff exists before messaging)
+	if hasNampower_CancelAura and hasGetPlayerBuffID then
+		local found = false
+		local counter = 0
+		while GetPlayerBuff(counter) >= 0 do
+			local index, untilCancelled = GetPlayerBuff(counter)
+			if untilCancelled ~= 1 then
+				local bid = GetPlayerBuffID(index)
+				bid = (bid < -1) and (bid + 65536) or bid
+				if SPELL_MANA_BUFFS[bid] then
+					CancelPlayerAuraSpellId(bid, 1)
+					found = true
+				end
+			end
+			counter = counter + 1
 		end
-		UIErrorsFrame:Clear()
-		UIErrorsFrame:AddMessage("Intellect or Wisdom or Spirit Removed")
+		if found then
+			UIErrorsFrame:Clear()
+			UIErrorsFrame:AddMessage("Intellect or Wisdom or Spirit Removed")
+		end
 		return
 	end
 
